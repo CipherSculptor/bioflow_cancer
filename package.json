@@ -1,12 +1,5 @@
 {
   "name": "bioflow",
   "version": "1.0.0",
-  "description": "BioFlow application",
-  "scripts": {
-    "build": "node netlify-build.js"
-  },
-  "dependencies": {
-    "fs": "0.0.1-security",
-    "path": "^0.12.7"
-  }
-} 
+  "description": "BioFlow application"
+}

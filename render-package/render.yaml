@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: bioflow
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: ./render-deploy/start.sh
+    healthCheckPath: /info
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.9.0
+    plan: free 

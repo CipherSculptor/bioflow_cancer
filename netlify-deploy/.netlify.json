@@ -1,0 +1,15 @@
+{
+  "build": {
+    "ignore": [
+      "*.py",
+      "__pycache__/",
+      "requirements.txt",
+      "models/",
+      "*.csv"
+    ],
+    "environment": {
+      "NETLIFY_USE_YARN": "false",
+      "NETLIFY_USE_PIP": "false"
+    }
+  }
+} 

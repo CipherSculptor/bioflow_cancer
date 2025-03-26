@@ -1,35 +1,16 @@
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# Deployment packages
-*.zip
-netlify-deploy/
-render-deploy/
-render-package/
-render-test/
-
-# Environment files
-.env
-.env.local
-
-# Node modules
-node_modules/
-
-# Python backend (exclude from frontend deployment)
+# Python files (not needed for frontend)
 *.py
 __pycache__/
-*.py[cod]
-*$py.class
-venv/
-env/
-requirements.txt
+*.pyc
 models/
-*.csv
-render.yaml
-wsgi.py 
+*.joblib
+
+# Build files
+/build
+/dist
+
+# Misc
+.DS_Store
+.vscode/
+*.log
+*.zip
