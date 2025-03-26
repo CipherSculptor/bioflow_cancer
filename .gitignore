@@ -21,9 +21,15 @@ render-test/
 # Node modules
 node_modules/
 
-# Python
+# Python backend (exclude from frontend deployment)
+*.py
 __pycache__/
 *.py[cod]
 *$py.class
 venv/
-env/ 
+env/
+requirements.txt
+models/
+*.csv
+render.yaml
+wsgi.py 

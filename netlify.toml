@@ -10,15 +10,6 @@
 [build.environment]
   API_URL = "https://bioflow.onrender.com"
 
-[[plugins]]
-  package = "@netlify/plugin-functions-core"
-
-[[plugins]]
-  package = "netlify-plugin-inline-functions-env"
-
-[[plugins]]
-  package = "@netlify/plugin-sitemap"
-
 [build.processing]
   skip_processing = false
 
