@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: bioflow
+    runtime: python3
+    buildCommand: pip install -r requirements.txt
+    startCommand: bash ./start.sh
+    healthCheckPath: /
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.9.0
+    plan: free 

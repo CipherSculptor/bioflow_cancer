@@ -1,0 +1,37 @@
+[build]
+  publish = "./"
+  command = "node netlify-build.js"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[build.environment]
+  API_URL = "https://bioflow.onrender.com"
+
+[[plugins]]
+  package = "@netlify/plugin-functions-core"
+
+[[plugins]]
+  package = "netlify-plugin-inline-functions-env"
+
+[[plugins]]
+  package = "@netlify/plugin-sitemap"
+
+[build.processing]
+  skip_processing = false
+
+[build.processing.html]
+  pretty_urls = true
+
+[build.processing.css]
+  bundle = true
+  minify = true
+
+[build.processing.js]
+  bundle = true
+  minify = true
+
+[build.processing.images]
+  compress = true 
