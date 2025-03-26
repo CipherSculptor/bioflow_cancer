@@ -1,6 +1,6 @@
 [build]
   publish = "./"
-  command = "node netlify-build.js"
+  command = "node fix-build.js"
 
 [[redirects]]
   from = "/*"
@@ -9,6 +9,13 @@
 
 [build.environment]
   API_URL = "https://bioflow.onrender.com"
+  PYTHON_USED = "false"
+  NODE_VERSION = "16"
+  PYTHON_VERSION = "0"
+  PIP_DISABLE_PIP_VERSION_CHECK = "1"
+  PYTHONPATH = "/dev/null"
+  NETLIFY_USE_YARN = "false"
+  NETLIFY_USE_PIP = "false"
 
 [build.processing]
   skip_processing = false
@@ -25,4 +32,4 @@
   minify = true
 
 [build.processing.images]
-  compress = true 
+  compress = true
