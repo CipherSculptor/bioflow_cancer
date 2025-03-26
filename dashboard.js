@@ -70,37 +70,138 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     // Update API URL to work with Netlify environment variables
-    const apiUrl = window.netlifyEnv?.API_URL || 'http://localhost:5070';
+    const apiUrl = window.netlifyEnv?.API_URL || 'https://bioflow.onrender.com';
     
-    // Show a better loading indicator
-    function showLoadingState() {
-        const submitBtn = form.querySelector('.evaluate-btn');
-        submitBtn.disabled = true;
-        submitBtn.textContent = 'Processing...';
+    // Add loading overlay styles if not already in CSS
+    if (!document.getElementById('loading-styles')) {
+        const style = document.createElement('style');
+        style.id = 'loading-styles';
+        style.textContent = `
+            #loading-overlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-color: rgba(0, 0, 0, 0.7);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                flex-direction: column;
+                z-index: 1000;
+                color: white;
+                font-size: 1.2rem;
+            }
+            
+            .loading-spinner {
+                width: 50px;
+                height: 50px;
+                border: 5px solid rgba(255, 255, 255, 0.3);
+                border-radius: 50%;
+                border-top-color: #fff;
+                animation: spin 1s ease-in-out infinite;
+                margin-bottom: 20px;
+            }
+            
+            @keyframes spin {
+                to { transform: rotate(360deg); }
+            }
+            
+            .loading-message {
+                margin-top: 15px;
+                text-align: center;
+                max-width: 80%;
+            }
+            
+            .timeout-btn {
+                margin-top: 20px;
+                padding: 8px 16px;
+                background-color: #4d68b2;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+            }
+            
+            .timeout-btn:hover {
+                background-color: #3a4f87;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+    
+    // Show enhanced loading state
+    function showLoadingState(message = "Processing your request...") {
+        // Create loading overlay if it doesn't exist
+        let loadingOverlay = document.getElementById('loading-overlay');
         
-        // Add loading overlay if it doesn't exist
-        if (!document.getElementById('loading-overlay')) {
-            const loadingOverlay = document.createElement('div');
+        if (!loadingOverlay) {
+            loadingOverlay = document.createElement('div');
             loadingOverlay.id = 'loading-overlay';
             loadingOverlay.innerHTML = `
                 <div class="loading-spinner"></div>
-                <p>Analyzing data...</p>
+                <div class="loading-message">${message}</div>
             `;
             document.body.appendChild(loadingOverlay);
+        } else {
+            const messageEl = loadingOverlay.querySelector('.loading-message');
+            if (messageEl) messageEl.textContent = message;
+            loadingOverlay.style.display = 'flex';
         }
-        document.getElementById('loading-overlay').style.display = 'flex';
+        
+        // Disable the submit button
+        const submitBtn = form.querySelector('.evaluate-btn');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Processing...';
+        }
     }
     
     // Hide loading state
     function hideLoadingState() {
-        const submitBtn = form.querySelector('.evaluate-btn');
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Evaluate';
-        
         const loadingOverlay = document.getElementById('loading-overlay');
         if (loadingOverlay) {
             loadingOverlay.style.display = 'none';
         }
+        
+        // Re-enable the submit button
+        const submitBtn = form.querySelector('.evaluate-btn');
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Evaluate';
+        }
+    }
+    
+    // Add a function to handle backend timeouts
+    function handleLongRequest(timeout = 30000) {
+        return new Promise((resolve, reject) => {
+            // Set timeout
+            const timeoutId = setTimeout(() => {
+                const loadingOverlay = document.getElementById('loading-overlay');
+                if (loadingOverlay) {
+                    const messageEl = loadingOverlay.querySelector('.loading-message');
+                    if (messageEl) {
+                        messageEl.innerHTML = `
+                            The server is taking longer than expected.<br>
+                            This might be because it's starting up after being inactive.<br><br>
+                            <strong>Please wait</strong> or <button class="timeout-btn" id="cancel-request-btn">Cancel Request</button>
+                        `;
+                    }
+                    
+                    // Add cancel button functionality
+                    const cancelBtn = document.getElementById('cancel-request-btn');
+                    if (cancelBtn) {
+                        cancelBtn.addEventListener('click', () => {
+                            hideLoadingState();
+                            reject(new Error('Request cancelled by user'));
+                        });
+                    }
+                }
+            }, timeout);
+            
+            // Clear timeout on resolve
+            resolve(() => clearTimeout(timeoutId));
+        });
     }
     
     form.addEventListener('submit', async (e) => {
@@ -114,20 +215,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const bloodGroupSelect = document.getElementById('userBloodGroup');
             const permittivityInput = document.getElementById('userPermittivity');
             
-            console.log('Form elements:', {
-                nameInput: nameInput ? nameInput.value : 'not found',
-                ageInput: ageInput ? ageInput.value : 'not found',
-                genderSelect: genderSelect ? genderSelect.value : 'not found',
-                bloodGroupSelect: bloodGroupSelect ? bloodGroupSelect.value : 'not found',
-                permittivityInput: permittivityInput ? permittivityInput.value : 'not found'
-            });
-            
-            // Validate blood group
+            // Basic validation
             if (!bloodGroupSelect || !bloodGroupSelect.value) {
                 throw new Error('Blood group is required');
             }
             
-            // Validate permittivity value
             if (!permittivityInput || permittivityInput.value === '') {
                 throw new Error('Permittivity value is required');
             }
@@ -145,50 +237,46 @@ document.addEventListener('DOMContentLoaded', () => {
                 age: ageInput ? parseInt(ageInput.value) || 0 : 0,
                 gender: genderSelect ? genderSelect.value : '',
                 bloodGroup: bloodGroupSelect.value,
-                permittivity: permittivityValue // Using the parsed float value
+                permittivity: permittivityValue
             };
             
-            console.log('Form data being sent:', formData);
+            // Show enhanced loading state
+            showLoadingState("Getting ready to process your data...");
             
-            // Show loading state
-            showLoadingState();
+            // Start the timeout handler
+            const clearTimeout = await handleLongRequest(5000);
             
-            // Set a timeout to handle long-running requests
-            const timeoutPromise = new Promise((_, reject) => {
-                setTimeout(() => reject(new Error('Request timed out after 20 seconds')), 20000);
-            });
-            
-            // Send data to API with timeout
-            console.log('Sending request to API...');
             try {
-                // First try to access the test endpoint to check connectivity
-                const testResponse = await Promise.race([
-                    fetch(`${apiUrl}/test`),
-                    timeoutPromise
-                ]);
-                console.log('Test endpoint response:', testResponse.status);
+                // Try to check API availability first
+                showLoadingState("Connecting to the server...");
                 
-                // Now send the actual prediction request with timeout
-                const response = await Promise.race([
-                    fetch(`${apiUrl}/predict`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json'
-                        },
-                        body: JSON.stringify(formData)
-                    }),
-                    timeoutPromise
-                ]);
+                // First try to ping the endpoint to wake up the server
+                await fetch(`${apiUrl}/test`).catch(() => {
+                    // If ping fails, we still proceed with the main request
+                    console.log("API ping failed, but continuing with prediction request");
+                });
                 
-                console.log('API response status:', response.status);
+                // Now send the actual prediction request
+                showLoadingState("Analyzing data...");
                 
-                const responseData = await response.json();
-                console.log('API response data:', responseData);
+                const response = await fetch(`${apiUrl}/predict`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+                
+                // Clear the timeout since request completed
+                clearTimeout();
                 
                 if (!response.ok) {
-                    throw new Error(responseData.error || 'Failed to get prediction');
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to get prediction');
                 }
+                
+                const responseData = await response.json();
                 
                 // Store both form data and results
                 localStorage.setItem('userDetails', JSON.stringify({
@@ -196,23 +284,25 @@ document.addEventListener('DOMContentLoaded', () => {
                     results: responseData
                 }));
                 
-                console.log('Redirecting to results page...');
                 // Redirect to results page
                 window.location.href = 'results.html';
             } catch (networkError) {
-                console.error('Network error details:', networkError);
+                // Clear timeout
+                clearTimeout();
                 hideLoadingState();
                 
-                if (networkError.message.includes('timed out')) {
-                    alert(`The request is taking longer than expected. The server might be busy or experiencing issues. Please try again in a moment.`);
+                console.error('Network error:', networkError);
+                
+                if (networkError.message.includes('Failed to fetch') || networkError.message.includes('NetworkError')) {
+                    alert(`The server appears to be offline or unreachable. The backend might be experiencing issues or starting up. Please try again in a minute.`);
                 } else {
-                    alert(`Failed to connect to the API server at ${apiUrl}. Please make sure the server is running.\n\nError: ${networkError.message}`);
+                    alert(`Error: ${networkError.message}`);
                 }
             }
         } catch (error) {
-            console.error('Error details:', error);
             hideLoadingState();
-            alert(`An error occurred: ${error.message}`);
+            console.error('Form error:', error);
+            alert(`Error: ${error.message}`);
         }
     });
 }); 
