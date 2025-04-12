@@ -28,12 +28,12 @@
                 </div>
             </div>
         </header>
-        
+
         <main class="form-container">
             <form id="evaluationForm">
                 <input type="text" id="userName" placeholder="Enter your Name" required>
                 <input type="number" id="userAge" placeholder="Enter your Age" min="1" max="120" required>
-                
+
                 <div class="select-wrapper">
                     <select id="userGender" required>
                         <option value="" disabled selected>Enter your Gender</option>
@@ -43,24 +43,12 @@
                     </select>
                 </div>
 
-                <div class="select-wrapper">
-                    <select id="userBloodGroup" required>
-                        <option value="" disabled selected>Enter your Blood Group</option>
-                        <option value="A+">A+</option>
-                        <option value="A-">A-</option>
-                        <option value="B+">B+</option>
-                        <option value="B-">B-</option>
-                        <option value="O+">O+</option>
-                        <option value="O-">O-</option>
-                        <option value="AB+">AB+</option>
-                        <option value="AB-">AB-</option>
-                    </select>
-                </div>
+                <!-- Blood group has been removed from the form -->
 
-                <input type="number" id="userPermittivity" placeholder="Enter your Permittivity Value (25.80-25.83)" 
+                <input type="number" id="userPermittivity" placeholder="Enter your Permittivity Value (25.80-25.83)"
                        step="0.0001" min="25.80" max="25.83" required>
                 <div class="help-text">For accurate predictions, use permittivity values between 25.80 and 25.83</div>
-                
+
                 <button type="submit" class="evaluate-btn">Evaluate</button>
             </form>
         </main>
@@ -68,4 +56,4 @@
     <script src="firebase-config.js"></script>
     <script src="dashboard.js"></script>
 </body>
-</html> 
+</html>
