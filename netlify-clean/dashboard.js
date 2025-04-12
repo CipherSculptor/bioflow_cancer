@@ -1,9 +1,9 @@
-document.addEventListener("DOMContentLoaded", () => {
-  const form = document.getElementById("evaluationForm");
-  const profileButton = document.getElementById("profileButton");
-  const profileDropdown = document.getElementById("profileDropdown");
-  const userDisplayName = document.getElementById("user-display-name");
-  const logoutButton = document.getElementById("logout-button");
+document.addEventListener('DOMContentLoaded', () => {
+  const form = document.getElementById('evaluationForm');
+  const profileButton = document.getElementById('profileButton');
+  const profileDropdown = document.getElementById('profileDropdown');
+  const userDisplayName = document.getElementById('user-display-name');
+  const logoutButton = document.getElementById('logout-button');
 
   // Check authentication state
   firebase.auth().onAuthStateChanged(function (user) {
@@ -76,6 +76,36 @@ document.addEventListener("DOMContentLoaded", () => {
   // Update API URL to work with Netlify environment variables
   const apiUrl = window.netlifyEnv?.API_URL || "http://localhost:5070";
 
+  // Function to handle long-running requests
+  async function handleLongRequest(timeout) {
+    return new Promise((resolve) => {
+      const timeoutId = setTimeout(() => {
+        const loadingText = document.querySelector(".loading-text");
+        if (loadingText) {
+          loadingText.textContent =
+            "This is taking longer than expected. Please wait...";
+
+          // Add cancel button after timeout
+          if (!document.querySelector(".cancel-btn")) {
+            const cancelBtn = document.createElement("button");
+            cancelBtn.className = "cancel-btn";
+            cancelBtn.textContent = "Cancel";
+            document.querySelector(".loading-overlay").appendChild(cancelBtn);
+
+            cancelBtn.addEventListener("click", () => {
+              hideLoadingState();
+              resolve(() => clearTimeout(timeoutId));
+              reject(new Error("Request cancelled by user"));
+            });
+          }
+        }
+      }, timeout);
+
+      // Clear timeout on resolve
+      resolve(() => clearTimeout(timeoutId));
+    });
+  }
+
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
 
@@ -125,21 +155,30 @@ document.addEventListener("DOMContentLoaded", () => {
         permittivity: permittivityValue, // Using the parsed float value
       };
 
+      // Debug: Log the form data being sent
       console.log("Form data being sent:", formData);
 
-      // Show loading state
-      const submitBtn = form.querySelector(".evaluate-btn");
-      submitBtn.disabled = true;
-      submitBtn.textContent = "Processing...";
+      // Show enhanced loading state
+      showLoadingState("Getting ready to process your data...");
 
-      // Send data to API
-      console.log("Sending request to API...");
+      // Start the timeout handler
+      const clearTimeout = await handleLongRequest(5000);
+
       try {
-        // First try to access the test endpoint to check connectivity
-        const testResponse = await fetch(`${apiUrl}/test`);
-        console.log("Test endpoint response:", testResponse.status);
+        // Try to check API availability first
+        showLoadingState("Connecting to the server...");
+
+        // First try to ping the endpoint to wake up the server
+        await fetch(`${apiUrl}/test`).catch(() => {
+          // If ping fails, we still proceed with the main request
+          console.log(
+            "API ping failed, but continuing with prediction request"
+          );
+        });
 
         // Now send the actual prediction request
+        showLoadingState("Analyzing data...");
+
         const response = await fetch(`${apiUrl}/predict`, {
           method: "POST",
           headers: {
@@ -149,45 +188,92 @@ document.addEventListener("DOMContentLoaded", () => {
           body: JSON.stringify(formData),
         });
 
-        console.log("API response status:", response.status);
-
-        const responseData = await response.json();
-        console.log("API response data:", responseData);
+        // Clear the timeout since request completed
+        clearTimeout();
 
         if (!response.ok) {
-          throw new Error(responseData.error || "Failed to get prediction");
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Failed to get prediction");
         }
 
-        // Store both form data and results
-        localStorage.setItem(
-          "userDetails",
-          JSON.stringify({
-            ...formData,
-            results: responseData,
-          })
-        );
+        const responseData = await response.json();
 
-        console.log("Redirecting to results page...");
+        // Debug: Log the response data
+        console.log("Response data received:", responseData);
+
+        // Store both form data and results
+        const userDetails = {
+          ...formData,
+          results: responseData,
+        };
+
+        // Debug: Log what we're storing in localStorage
+        console.log("Storing in localStorage:", userDetails);
+
+        localStorage.setItem("userDetails", JSON.stringify(userDetails));
+
         // Redirect to results page
         window.location.href = "results.html";
       } catch (networkError) {
-        console.error("Network error details:", networkError);
-        alert(
-          `Failed to connect to the API server at ${apiUrl}. Please make sure the server is running.\n\nError: ${networkError.message}`
-        );
+        // Clear timeout
+        clearTimeout();
+        hideLoadingState();
 
-        // Restore button state
-        submitBtn.disabled = false;
-        submitBtn.textContent = "Evaluate";
+        console.error("Network error:", networkError);
+        console.error("Error stack:", networkError.stack);
+
+        if (
+          networkError.message.includes("Failed to fetch") ||
+          networkError.message.includes("NetworkError")
+        ) {
+          alert(
+            `The server appears to be offline or unreachable. The backend might be experiencing issues or starting up. Please try again in a minute.`
+          );
+        } else {
+          // Show a more detailed error message
+          alert(
+            `Error: ${networkError.message}\n\nPlease check the browser console for more details.`
+          );
+        }
       }
     } catch (error) {
-      console.error("Error details:", error);
-      alert(`An error occurred: ${error.message}`);
-
-      // Restore button state
-      const submitBtn = form.querySelector(".evaluate-btn");
-      submitBtn.disabled = false;
-      submitBtn.textContent = "Evaluate";
+      hideLoadingState();
+      console.error("Form error:", error);
+      console.error("Error stack:", error.stack);
+      alert(
+        `Form Error: ${error.message}\n\nPlease check the browser console for more details.`
+      );
     }
   });
 });
+
+// Loading state functions
+function showLoadingState(message) {
+  // Remove existing overlay if any
+  hideLoadingState();
+
+  // Create overlay
+  const overlay = document.createElement("div");
+  overlay.className = "loading-overlay";
+
+  // Create spinner
+  const spinner = document.createElement("div");
+  spinner.className = "loading-spinner";
+  overlay.appendChild(spinner);
+
+  // Create text
+  const text = document.createElement("div");
+  text.className = "loading-text";
+  text.textContent = message || "Loading...";
+  overlay.appendChild(text);
+
+  // Add to body
+  document.body.appendChild(overlay);
+}
+
+function hideLoadingState() {
+  const overlay = document.querySelector(".loading-overlay");
+  if (overlay) {
+    overlay.remove();
+  }
+}
