@@ -17,8 +17,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   try {
     // Load user details and results
-    const userData = JSON.parse(localStorage.getItem("userDetails") || "{}");
-    console.log("User data from localStorage:", userData);
+    const userDetailsStr = localStorage.getItem("userDetails") || "{}";
+    console.log("Raw user details from localStorage:", userDetailsStr);
+
+    const userData = JSON.parse(userDetailsStr);
+    console.log("Parsed user data from localStorage:", userData);
 
     // Check if we have prediction results
     if (!userData.results) {
@@ -30,6 +33,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Debug: Log the results object to see what properties are available
     console.log("Results object:", userData.results);
+
+    // Debug: Log all keys in the results object
+    console.log("Results keys:", Object.keys(userData.results));
 
     // Display results in the form
     document.getElementById("resultName").value = userData.results.name || "-";
@@ -67,7 +73,17 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log("Results displayed successfully");
   } catch (error) {
     console.error("Error loading results:", error);
-    alert("Error loading results: " + error.message);
+    console.error("Error stack:", error.stack);
+    alert(
+      "Error loading results: " +
+        error.message +
+        "\n\nPlease check the browser console for more details."
+    );
+
+    // Try to recover by redirecting back to dashboard
+    setTimeout(() => {
+      window.location.href = "dashboard.html";
+    }, 3000);
   }
 });
 

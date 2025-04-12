@@ -256,6 +256,9 @@ document.addEventListener("DOMContentLoaded", () => {
         // Try to check API availability first
         showLoadingState("Connecting to the server...");
 
+        // Debug: Log the form data being sent
+        console.log("Form data being sent:", formData);
+
         // First try to ping the endpoint to wake up the server
         await fetch(`${apiUrl}/test`).catch(() => {
           // If ping fails, we still proceed with the main request
@@ -286,14 +289,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const responseData = await response.json();
 
+        // Debug: Log the response data
+        console.log("Response data received:", responseData);
+
         // Store both form data and results
-        localStorage.setItem(
-          "userDetails",
-          JSON.stringify({
-            ...formData,
-            results: responseData,
-          })
-        );
+        const userDetails = {
+          ...formData,
+          results: responseData,
+        };
+
+        // Debug: Log what we're storing in localStorage
+        console.log("Storing in localStorage:", userDetails);
+
+        localStorage.setItem("userDetails", JSON.stringify(userDetails));
 
         // Redirect to results page
         window.location.href = "results.html";
@@ -303,6 +311,7 @@ document.addEventListener("DOMContentLoaded", () => {
         hideLoadingState();
 
         console.error("Network error:", networkError);
+        console.error("Error stack:", networkError.stack);
 
         if (
           networkError.message.includes("Failed to fetch") ||
@@ -312,13 +321,19 @@ document.addEventListener("DOMContentLoaded", () => {
             `The server appears to be offline or unreachable. The backend might be experiencing issues or starting up. Please try again in a minute.`
           );
         } else {
-          alert(`Error: ${networkError.message}`);
+          // Show a more detailed error message
+          alert(
+            `Error: ${networkError.message}\n\nPlease check the browser console for more details.`
+          );
         }
       }
     } catch (error) {
       hideLoadingState();
       console.error("Form error:", error);
-      alert(`Error: ${error.message}`);
+      console.error("Error stack:", error.stack);
+      alert(
+        `Form Error: ${error.message}\n\nPlease check the browser console for more details.`
+      );
     }
   });
 });
