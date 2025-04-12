@@ -1,9 +1,9 @@
-document.addEventListener("DOMContentLoaded", () => {
-  const form = document.getElementById("evaluationForm");
-  const profileButton = document.getElementById("profileButton");
-  const profileDropdown = document.getElementById("profileDropdown");
-  const userDisplayName = document.getElementById("user-display-name");
-  const logoutButton = document.getElementById("logout-button");
+document.addEventListener('DOMContentLoaded', () => {
+  const form = document.getElementById('evaluationForm');
+  const profileButton = document.getElementById('profileButton');
+  const profileDropdown = document.getElementById('profileDropdown');
+  const userDisplayName = document.getElementById('user-display-name');
+  const logoutButton = document.getElementById('logout-button');
 
   // Check authentication state
   firebase.auth().onAuthStateChanged(function (user) {
@@ -74,129 +74,27 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Update API URL to work with Netlify environment variables
-  const apiUrl = window.netlifyEnv?.API_URL || "https://bioflow.onrender.com";
+  const apiUrl = window.netlifyEnv?.API_URL || "http://localhost:5070";
 
-  // Add loading overlay styles if not already in CSS
-  if (!document.getElementById("loading-styles")) {
-    const style = document.createElement("style");
-    style.id = "loading-styles";
-    style.textContent = `
-            #loading-overlay {
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background-color: rgba(0, 0, 0, 0.7);
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                flex-direction: column;
-                z-index: 1000;
-                color: white;
-                font-size: 1.2rem;
-            }
-
-            .loading-spinner {
-                width: 50px;
-                height: 50px;
-                border: 5px solid rgba(255, 255, 255, 0.3);
-                border-radius: 50%;
-                border-top-color: #fff;
-                animation: spin 1s ease-in-out infinite;
-                margin-bottom: 20px;
-            }
-
-            @keyframes spin {
-                to { transform: rotate(360deg); }
-            }
-
-            .loading-message {
-                margin-top: 15px;
-                text-align: center;
-                max-width: 80%;
-            }
-
-            .timeout-btn {
-                margin-top: 20px;
-                padding: 8px 16px;
-                background-color: #4d68b2;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                cursor: pointer;
-            }
-
-            .timeout-btn:hover {
-                background-color: #3a4f87;
-            }
-        `;
-    document.head.appendChild(style);
-  }
-
-  // Show enhanced loading state
-  function showLoadingState(message = "Processing your request...") {
-    // Create loading overlay if it doesn't exist
-    let loadingOverlay = document.getElementById("loading-overlay");
-
-    if (!loadingOverlay) {
-      loadingOverlay = document.createElement("div");
-      loadingOverlay.id = "loading-overlay";
-      loadingOverlay.innerHTML = `
-                <div class="loading-spinner"></div>
-                <div class="loading-message">${message}</div>
-            `;
-      document.body.appendChild(loadingOverlay);
-    } else {
-      const messageEl = loadingOverlay.querySelector(".loading-message");
-      if (messageEl) messageEl.textContent = message;
-      loadingOverlay.style.display = "flex";
-    }
-
-    // Disable the submit button
-    const submitBtn = form.querySelector(".evaluate-btn");
-    if (submitBtn) {
-      submitBtn.disabled = true;
-      submitBtn.textContent = "Processing...";
-    }
-  }
-
-  // Hide loading state
-  function hideLoadingState() {
-    const loadingOverlay = document.getElementById("loading-overlay");
-    if (loadingOverlay) {
-      loadingOverlay.style.display = "none";
-    }
-
-    // Re-enable the submit button
-    const submitBtn = form.querySelector(".evaluate-btn");
-    if (submitBtn) {
-      submitBtn.disabled = false;
-      submitBtn.textContent = "Evaluate";
-    }
-  }
-
-  // Add a function to handle backend timeouts
-  function handleLongRequest(timeout = 30000) {
-    return new Promise((resolve, reject) => {
-      // Set timeout
+  // Function to handle long-running requests
+  async function handleLongRequest(timeout) {
+    return new Promise((resolve) => {
       const timeoutId = setTimeout(() => {
-        const loadingOverlay = document.getElementById("loading-overlay");
-        if (loadingOverlay) {
-          const messageEl = loadingOverlay.querySelector(".loading-message");
-          if (messageEl) {
-            messageEl.innerHTML = `
-                            The server is taking longer than expected.<br>
-                            This might be because it's starting up after being inactive.<br><br>
-                            <strong>Please wait</strong> or <button class="timeout-btn" id="cancel-request-btn">Cancel Request</button>
-                        `;
-          }
+        const loadingText = document.querySelector(".loading-text");
+        if (loadingText) {
+          loadingText.textContent =
+            "This is taking longer than expected. Please wait...";
 
-          // Add cancel button functionality
-          const cancelBtn = document.getElementById("cancel-request-btn");
-          if (cancelBtn) {
+          // Add cancel button after timeout
+          if (!document.querySelector(".cancel-btn")) {
+            const cancelBtn = document.createElement("button");
+            cancelBtn.className = "cancel-btn";
+            cancelBtn.textContent = "Cancel";
+            document.querySelector(".loading-overlay").appendChild(cancelBtn);
+
             cancelBtn.addEventListener("click", () => {
               hideLoadingState();
+              resolve(() => clearTimeout(timeoutId));
               reject(new Error("Request cancelled by user"));
             });
           }
@@ -218,15 +116,26 @@ document.addEventListener("DOMContentLoaded", () => {
       const genderSelect = document.getElementById("userGender");
       const permittivityInput = document.getElementById("userPermittivity");
 
-      // Basic validation
+      console.log("Form elements:", {
+        nameInput: nameInput ? nameInput.value : "not found",
+        ageInput: ageInput ? ageInput.value : "not found",
+        genderSelect: genderSelect ? genderSelect.value : "not found",
+        permittivityInput: permittivityInput
+          ? permittivityInput.value
+          : "not found",
+      });
+
+      // Validate gender
       if (!genderSelect || !genderSelect.value) {
         throw new Error("Gender is required");
       }
 
+      // Validate age
       if (!ageInput || ageInput.value === "") {
         throw new Error("Age is required");
       }
 
+      // Validate permittivity value
       if (!permittivityInput || permittivityInput.value === "") {
         throw new Error("Permittivity value is required");
       }
@@ -243,8 +152,11 @@ document.addEventListener("DOMContentLoaded", () => {
         name: nameInput ? nameInput.value : "",
         age: ageInput ? parseInt(ageInput.value) || 0 : 0,
         gender: genderSelect ? genderSelect.value : "",
-        permittivity: permittivityValue,
+        permittivity: permittivityValue, // Using the parsed float value
       };
+
+      // Debug: Log the form data being sent
+      console.log("Form data being sent:", formData);
 
       // Show enhanced loading state
       showLoadingState("Getting ready to process your data...");
@@ -255,9 +167,6 @@ document.addEventListener("DOMContentLoaded", () => {
       try {
         // Try to check API availability first
         showLoadingState("Connecting to the server...");
-
-        // Debug: Log the form data being sent
-        console.log("Form data being sent:", formData);
 
         // First try to ping the endpoint to wake up the server
         await fetch(`${apiUrl}/test`).catch(() => {
@@ -337,3 +246,34 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 });
+
+// Loading state functions
+function showLoadingState(message) {
+  // Remove existing overlay if any
+  hideLoadingState();
+
+  // Create overlay
+  const overlay = document.createElement("div");
+  overlay.className = "loading-overlay";
+
+  // Create spinner
+  const spinner = document.createElement("div");
+  spinner.className = "loading-spinner";
+  overlay.appendChild(spinner);
+
+  // Create text
+  const text = document.createElement("div");
+  text.className = "loading-text";
+  text.textContent = message || "Loading...";
+  overlay.appendChild(text);
+
+  // Add to body
+  document.body.appendChild(overlay);
+}
+
+function hideLoadingState() {
+  const overlay = document.querySelector(".loading-overlay");
+  if (overlay) {
+    overlay.remove();
+  }
+}
