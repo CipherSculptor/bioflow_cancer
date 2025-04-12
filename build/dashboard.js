@@ -76,6 +76,37 @@ document.addEventListener("DOMContentLoaded", () => {
   // Update API URL to work with Netlify environment variables
   const apiUrl = window.netlifyEnv?.API_URL || "http://localhost:5070";
 
+  // Show a better loading indicator
+  function showLoadingState() {
+    const submitBtn = form.querySelector(".evaluate-btn");
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Processing...";
+
+    // Add loading overlay if it doesn't exist
+    if (!document.getElementById("loading-overlay")) {
+      const loadingOverlay = document.createElement("div");
+      loadingOverlay.id = "loading-overlay";
+      loadingOverlay.innerHTML = `
+                <div class="loading-spinner"></div>
+                <p>Analyzing data...</p>
+            `;
+      document.body.appendChild(loadingOverlay);
+    }
+    document.getElementById("loading-overlay").style.display = "flex";
+  }
+
+  // Hide loading state
+  function hideLoadingState() {
+    const submitBtn = form.querySelector(".evaluate-btn");
+    submitBtn.disabled = false;
+    submitBtn.textContent = "Evaluate";
+
+    const loadingOverlay = document.getElementById("loading-overlay");
+    if (loadingOverlay) {
+      loadingOverlay.style.display = "none";
+    }
+  }
+
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
 
@@ -128,26 +159,38 @@ document.addEventListener("DOMContentLoaded", () => {
       console.log("Form data being sent:", formData);
 
       // Show loading state
-      const submitBtn = form.querySelector(".evaluate-btn");
-      submitBtn.disabled = true;
-      submitBtn.textContent = "Processing...";
+      showLoadingState();
 
-      // Send data to API
+      // Set a timeout to handle long-running requests
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(
+          () => reject(new Error("Request timed out after 20 seconds")),
+          20000
+        );
+      });
+
+      // Send data to API with timeout
       console.log("Sending request to API...");
       try {
         // First try to access the test endpoint to check connectivity
-        const testResponse = await fetch(`${apiUrl}/test`);
+        const testResponse = await Promise.race([
+          fetch(`${apiUrl}/test`),
+          timeoutPromise,
+        ]);
         console.log("Test endpoint response:", testResponse.status);
 
-        // Now send the actual prediction request
-        const response = await fetch(`${apiUrl}/predict`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify(formData),
-        });
+        // Now send the actual prediction request with timeout
+        const response = await Promise.race([
+          fetch(`${apiUrl}/predict`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            body: JSON.stringify(formData),
+          }),
+          timeoutPromise,
+        ]);
 
         console.log("API response status:", response.status);
 
@@ -172,22 +215,22 @@ document.addEventListener("DOMContentLoaded", () => {
         window.location.href = "results.html";
       } catch (networkError) {
         console.error("Network error details:", networkError);
-        alert(
-          `Failed to connect to the API server at ${apiUrl}. Please make sure the server is running.\n\nError: ${networkError.message}`
-        );
+        hideLoadingState();
 
-        // Restore button state
-        submitBtn.disabled = false;
-        submitBtn.textContent = "Evaluate";
+        if (networkError.message.includes("timed out")) {
+          alert(
+            `The request is taking longer than expected. The server might be busy or experiencing issues. Please try again in a moment.`
+          );
+        } else {
+          alert(
+            `Failed to connect to the API server at ${apiUrl}. Please make sure the server is running.\n\nError: ${networkError.message}`
+          );
+        }
       }
     } catch (error) {
       console.error("Error details:", error);
+      hideLoadingState();
       alert(`An error occurred: ${error.message}`);
-
-      // Restore button state
-      const submitBtn = form.querySelector(".evaluate-btn");
-      submitBtn.disabled = false;
-      submitBtn.textContent = "Evaluate";
     }
   });
 });
