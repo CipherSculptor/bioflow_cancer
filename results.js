@@ -28,6 +28,9 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
+    // Debug: Log the results object to see what properties are available
+    console.log("Results object:", userData.results);
+
     // Display results in the form
     document.getElementById("resultName").value = userData.results.name || "-";
 
@@ -102,7 +105,7 @@ function generatePDF() {
     // Add header
     doc.setFontSize(22);
     doc.setTextColor(120, 3, 3);
-    doc.text("BioFlow - Blood Test Results", 105, 20, { align: "center" });
+    doc.text("BioFlow - CBC Test Results", 105, 20, { align: "center" });
 
     // Add date
     doc.setFontSize(12);
@@ -124,6 +127,8 @@ function generatePDF() {
       "resultPlateletsCount"
     ).value;
     const wbcCount = document.getElementById("resultWBCCount")?.value || "";
+
+    // Note: Blood group has been removed from the form and API
 
     // Get status information if available
     const userData = JSON.parse(localStorage.getItem("userDetails") || "{}");
