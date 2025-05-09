@@ -14,4 +14,5 @@ pip install werkzeug==2.2.3
 
 # Start the application
 echo "Starting the application..."
-gunicorn --log-level debug wsgi:app 
+# Use the PORT environment variable provided by Render
+gunicorn --log-level debug --bind 0.0.0.0:$PORT wsgi:app
