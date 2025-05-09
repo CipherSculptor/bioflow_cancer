@@ -10,4 +10,4 @@ ls -la
 
 # Start the application
 echo "Starting the application..."
-gunicorn --log-level debug wsgi:app
+python -m gunicorn api:app --log-level debug
