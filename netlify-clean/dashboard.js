@@ -1,24 +1,39 @@
-// Dashboard.js - Complete rewrite with same functionality but no bloodGroup references
-document.addEventListener('DOMContentLoaded', () => {
-  // Get DOM elements
-  const form = document.getElementById('evaluationForm');
-  const profileButton = document.getElementById('profileButton');
-  const profileDropdown = document.getElementById('profileDropdown');
-  const userDisplayName = document.getElementById('user-display-name');
-  const logoutButton = document.getElementById('logout-button');
+document.addEventListener("DOMContentLoaded", () => {
+  const form = document.getElementById("evaluationForm");
+  const profileButton = document.getElementById("profileButton");
+  const profileDropdown = document.getElementById("profileDropdown");
+  const userDisplayName = document.getElementById("user-display-name");
+  const logoutButton = document.getElementById("logout-button");
 
-  // Toggle profile dropdown
-  if (profileButton) {
-    profileButton.addEventListener("click", (e) => {
-      e.stopPropagation();
-      profileDropdown.classList.toggle("show");
-    });
-  }
+  // Check authentication state
+  firebase.auth().onAuthStateChanged(function (user) {
+    if (user) {
+      // User is signed in
+      console.log("User is signed in:", user);
 
-  // Close dropdown when clicking outside
-  document.addEventListener("click", (e) => {
-    if (profileButton && !profileButton.contains(e.target)) {
-      profileDropdown.classList.remove("show");
+      // Update display name
+      if (user.displayName) {
+        userDisplayName.textContent = user.displayName;
+      } else if (user.email) {
+        // If no display name, use email without domain
+        userDisplayName.textContent = user.email.split("@")[0];
+      }
+
+      // Store user info in localStorage for other pages
+      localStorage.setItem("userEmail", user.email);
+      if (user.displayName) {
+        localStorage.setItem("userName", user.displayName);
+      }
+
+      // Optionally pre-fill the name field if it exists
+      const nameInput = document.getElementById("userName");
+      if (nameInput && user.displayName) {
+        nameInput.value = user.displayName;
+      }
+    } else {
+      // No user is signed in, redirect to login
+      console.log("No user is signed in. Redirecting to login...");
+      window.location.href = "index.html";
     }
   });
 
@@ -26,172 +41,196 @@ document.addEventListener('DOMContentLoaded', () => {
   if (logoutButton) {
     logoutButton.addEventListener("click", (e) => {
       e.preventDefault();
-      
-      try {
-        firebase.auth().signOut().then(() => {
+
+      firebase
+        .auth()
+        .signOut()
+        .then(() => {
+          // Sign-out successful
           console.log("User signed out successfully");
-          // Clear any stored data
-          localStorage.clear();
-          // Redirect to login page
+          localStorage.removeItem("userEmail");
+          localStorage.removeItem("userName");
           window.location.href = "index.html";
-        }).catch((error) => {
+        })
+        .catch((error) => {
+          // An error happened
           console.error("Error signing out:", error);
           alert("Failed to sign out: " + error.message);
         });
-      } catch (error) {
-        console.error("Error during logout:", error);
-        // Fallback redirect
-        window.location.href = "index.html";
-      }
     });
   }
 
+  // Toggle profile dropdown
+  profileButton.addEventListener("click", (e) => {
+    e.stopPropagation();
+    profileDropdown.classList.toggle("show");
+  });
+
+  // Close dropdown when clicking outside
+  document.addEventListener("click", (e) => {
+    if (!profileButton.contains(e.target)) {
+      profileDropdown.classList.remove("show");
+    }
+  });
+
   // Update API URL to work with Netlify environment variables
   const apiUrl = window.netlifyEnv?.API_URL || "http://localhost:5070";
-  console.log("Using API URL:", apiUrl);
 
-  // Form submission handler
-  if (form) {
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      console.log("Form submitted");
+  // Show a better loading indicator
+  function showLoadingState() {
+    const submitBtn = form.querySelector(".evaluate-btn");
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Processing...";
 
-      // Get form elements
+    // Add loading overlay if it doesn't exist
+    if (!document.getElementById("loading-overlay")) {
+      const loadingOverlay = document.createElement("div");
+      loadingOverlay.id = "loading-overlay";
+      loadingOverlay.innerHTML = `
+                <div class="loading-spinner"></div>
+                <p>Analyzing data...</p>
+            `;
+      document.body.appendChild(loadingOverlay);
+    }
+    document.getElementById("loading-overlay").style.display = "flex";
+  }
+
+  // Hide loading state
+  function hideLoadingState() {
+    const submitBtn = form.querySelector(".evaluate-btn");
+    submitBtn.disabled = false;
+    submitBtn.textContent = "Evaluate";
+
+    const loadingOverlay = document.getElementById("loading-overlay");
+    if (loadingOverlay) {
+      loadingOverlay.style.display = "none";
+    }
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    try {
+      // Get form elements by ID
       const nameInput = document.getElementById("userName");
       const ageInput = document.getElementById("userAge");
       const genderSelect = document.getElementById("userGender");
       const permittivityInput = document.getElementById("userPermittivity");
-      
-      // Get submit button for state management
-      const submitBtn = form.querySelector('.evaluate-btn');
-      
-      try {
-        // Validate inputs
-        if (!nameInput || nameInput.value.trim() === "") {
-          throw new Error("Name is required");
-        }
-        
-        if (!ageInput || ageInput.value === "") {
-          throw new Error("Age is required");
-        }
-        
-        if (!genderSelect || !genderSelect.value) {
-          throw new Error("Gender is required");
-        }
-        
-        if (!permittivityInput || permittivityInput.value === "") {
-          throw new Error("Permittivity value is required");
-        }
-        
-        // Parse numeric values
-        const age = parseInt(ageInput.value);
-        const permittivity = parseFloat(permittivityInput.value);
-        
-        if (isNaN(age)) {
-          throw new Error("Age must be a valid number");
-        }
-        
-        if (isNaN(permittivity)) {
-          throw new Error("Permittivity must be a valid number");
-        }
-        
-        // Create request data object - explicitly only include needed fields
-        const requestData = {
-          name: nameInput.value.trim(),
-          age: age,
-          gender: genderSelect.value,
-          permittivity: permittivity
-        };
-        
-        console.log("Request data:", requestData);
-        
-        // Update button state
-        if (submitBtn) {
-          submitBtn.disabled = true;
-          submitBtn.textContent = "Processing...";
-        }
-        
-        // First check if API is available
-        try {
-          console.log("Testing API connection...");
-          const testResponse = await fetch(`${apiUrl}/test`, {
-            method: 'GET',
-            headers: {
-              'Accept': 'application/json'
-            }
-          });
-          
-          if (!testResponse.ok) {
-            throw new Error(`API test failed with status: ${testResponse.status}`);
-          }
-          
-          console.log("API connection successful");
-          
-          // Now send the actual prediction request
-          console.log("Sending prediction request...");
-          const response = await fetch(`${apiUrl}/predict`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json'
-            },
-            body: JSON.stringify(requestData)
-          });
-          
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error("API error response:", errorText);
-            throw new Error(`API request failed with status: ${response.status}`);
-          }
-          
-          // Parse response
-          const responseData = await response.json();
-          console.log("API response:", responseData);
-          
-          // Store only the necessary data in localStorage
-          const userDetails = {
-            name: requestData.name,
-            age: requestData.age,
-            gender: requestData.gender,
-            permittivity: requestData.permittivity,
-            results: responseData
-          };
-          
-          // Clear any existing data first
-          localStorage.removeItem("userDetails");
-          
-          // Store new data
-          localStorage.setItem("userDetails", JSON.stringify(userDetails));
-          console.log("Data stored in localStorage");
-          
-          // Redirect to results page
-          window.location.href = "results.html";
-        } catch (apiError) {
-          console.error("API error:", apiError);
-          
-          // Reset button state
-          if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.textContent = "Evaluate";
-          }
-          
-          // Show error message
-          alert(`Failed to connect to the API server at ${apiUrl}. Please make sure the server is running.\n\nError: ${apiError.message}`);
-        }
-      } catch (validationError) {
-        console.error("Validation error:", validationError);
-        
-        // Reset button state
-        if (submitBtn) {
-          submitBtn.disabled = false;
-          submitBtn.textContent = "Evaluate";
-        }
-        
-        // Show error message
-        alert(validationError.message);
+
+      console.log("Form elements:", {
+        nameInput: nameInput ? nameInput.value : "not found",
+        ageInput: ageInput ? ageInput.value : "not found",
+        genderSelect: genderSelect ? genderSelect.value : "not found",
+        permittivityInput: permittivityInput
+          ? permittivityInput.value
+          : "not found",
+      });
+
+      // Validate age
+      if (!ageInput || !ageInput.value) {
+        throw new Error("Age is required");
       }
-    });
-  } else {
-    console.error("Form element not found");
-  }
+
+      // Validate gender
+      if (!genderSelect || !genderSelect.value) {
+        throw new Error("Gender is required");
+      }
+
+      // Validate permittivity value
+      if (!permittivityInput || permittivityInput.value === "") {
+        throw new Error("Permittivity value is required");
+      }
+
+      // Convert permittivity to float
+      const permittivityValue = parseFloat(permittivityInput.value);
+
+      if (isNaN(permittivityValue)) {
+        throw new Error("Permittivity must be a valid number");
+      }
+
+      // Create the form data object with selected values
+      const formData = {
+        name: nameInput ? nameInput.value : "",
+        age: ageInput ? parseInt(ageInput.value) || 0 : 0,
+        gender: genderSelect ? genderSelect.value : "",
+        permittivity: permittivityValue, // Using the parsed float value
+      };
+
+      console.log("Form data being sent:", formData);
+
+      // Show loading state
+      showLoadingState();
+
+      // Set a timeout to handle long-running requests
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(
+          () => reject(new Error("Request timed out after 20 seconds")),
+          20000
+        );
+      });
+
+      // Send data to API with timeout
+      console.log("Sending request to API...");
+      try {
+        // First try to access the test endpoint to check connectivity
+        const testResponse = await Promise.race([
+          fetch(`${apiUrl}/test`),
+          timeoutPromise,
+        ]);
+        console.log("Test endpoint response:", testResponse.status);
+
+        // Now send the actual prediction request with timeout
+        const response = await Promise.race([
+          fetch(`${apiUrl}/predict`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            body: JSON.stringify(formData),
+          }),
+          timeoutPromise,
+        ]);
+
+        console.log("API response status:", response.status);
+
+        const responseData = await response.json();
+        console.log("API response data:", responseData);
+
+        if (!response.ok) {
+          throw new Error(responseData.error || "Failed to get prediction");
+        }
+
+        // Store both form data and results
+        localStorage.setItem(
+          "userDetails",
+          JSON.stringify({
+            ...formData,
+            results: responseData,
+          })
+        );
+
+        console.log("Redirecting to results page...");
+        // Redirect to results page
+        window.location.href = "results.html";
+      } catch (networkError) {
+        console.error("Network error details:", networkError);
+        hideLoadingState();
+
+        if (networkError.message.includes("timed out")) {
+          alert(
+            `The request is taking longer than expected. The server might be busy or experiencing issues. Please try again in a moment.`
+          );
+        } else {
+          alert(
+            `Failed to connect to the API server at ${apiUrl}. Please make sure the server is running.\n\nError: ${networkError.message}`
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Error details:", error);
+      hideLoadingState();
+      alert(`An error occurred: ${error.message}`);
+    }
+  });
 });

@@ -3,7 +3,7 @@ import pandas as pd
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.neural_network import MLPRegressor
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
 import joblib
 import os
@@ -19,7 +19,7 @@ model_rbc = None
 model_wbc = None
 model_platelets = None
 model_hemoglobin = None
-valid_genders = ['male', 'female', 'other']
+valid_blood_groups = ['A+', 'B+', 'O+']
 
 def load_or_train_models():
     global encoder, scaler, model_rbc, model_wbc, model_platelets, model_hemoglobin
@@ -47,10 +47,6 @@ def load_or_train_models():
                     # Handle string values that may have commas as thousand separators
                     data[col] = pd.to_numeric(data[col].str.replace(',', ''), errors='coerce')
 
-            # Add synthetic Age and Sex columns since we're removing Blood Group
-            data['Age'] = np.random.randint(18, 80, len(data))
-            data['Sex'] = np.random.choice(['male', 'female'], len(data))
-
             print("Data shape after loading:", data.shape)
             print("Data columns:", data.columns.tolist())
             print("Data preview:", data.head())
@@ -59,8 +55,7 @@ def load_or_train_models():
             # Sample data if file not found (for development purposes)
             print("Warning: CSV file not found. Using sample data.")
             data = pd.DataFrame({
-                'Age': np.random.randint(18, 80, 30),
-                'Sex': np.random.choice(['male', 'female', 'other'], 30),
+                'Blood Group': ['A+', 'B+', 'O+'] * 10,
                 'Permittivity': np.random.normal(25.81, 0.01, 30),
                 'RBC Count': np.random.normal(4.5, 0.5, 30),
                 'WBC Count': np.random.normal(8000, 1000, 30),
@@ -68,17 +63,21 @@ def load_or_train_models():
                 'Hemoglobin': np.random.normal(14, 1.5, 30)
             })
 
+        # Filter data for supported blood groups
+        data = data[data['Blood Group'].isin(valid_blood_groups)]
+        print(f"After filtering: {len(data)} rows with valid blood groups")
+
         if len(data) < 5:
-            raise ValueError("Not enough data points for training")
+            raise ValueError("Not enough data points for training after filtering")
 
         # Preprocess data
         encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
-        sex_encoded = encoder.fit_transform(data[['Sex']])
+        blood_group_encoded = encoder.fit_transform(data[['Blood Group']])
 
         scaler = StandardScaler()
-        numerical_features = scaler.fit_transform(data[['Age', 'Permittivity']])
+        numerical_features = scaler.fit_transform(data[['Permittivity']])
 
-        X = np.hstack((numerical_features, sex_encoded))
+        X = np.hstack((numerical_features, blood_group_encoded))
         y_rbc = data['RBC Count']
         y_wbc = data['WBC Count']
         y_platelets = data['Platelets']
@@ -90,13 +89,13 @@ def load_or_train_models():
         _, _, y_platelets_train, y_platelets_test = train_test_split(X, y_platelets, test_size=0.2, random_state=42)
         _, _, y_hemoglobin_train, y_hemoglobin_test = train_test_split(X, y_hemoglobin, test_size=0.2, random_state=42)
 
-        print("Training models with MLPRegressor (Neural Network)...")
+        print("Training models with RandomForestRegressor...")
 
-        # Train models with MLPRegressor instead of RandomForest
-        model_rbc = MLPRegressor(hidden_layer_sizes=(100, 50), max_iter=1000, random_state=42)
-        model_wbc = MLPRegressor(hidden_layer_sizes=(100, 50), max_iter=1000, random_state=42)
-        model_platelets = MLPRegressor(hidden_layer_sizes=(100, 50), max_iter=1000, random_state=42)
-        model_hemoglobin = MLPRegressor(hidden_layer_sizes=(100, 50), max_iter=1000, random_state=42)
+        # Train models with RandomForest instead of Linear Regression
+        model_rbc = RandomForestRegressor(n_estimators=100, random_state=42)
+        model_wbc = RandomForestRegressor(n_estimators=100, random_state=42)
+        model_platelets = RandomForestRegressor(n_estimators=100, random_state=42)
+        model_hemoglobin = RandomForestRegressor(n_estimators=100, random_state=42)
 
         model_rbc.fit(X_train, y_rbc_train)
         model_wbc.fit(X_train, y_wbc_train)
@@ -131,22 +130,21 @@ def predict():
         # Extract data from request
         try:
             permittivity = float(data['permittivity'])
-            age = int(data['age'])
-            sex = data['gender']
         except (ValueError, TypeError):
             return jsonify({
-                'error': 'Invalid input values. Age and permittivity must be valid numbers.'
+                'error': 'Permittivity must be a valid number'
             }), 400
 
+        blood_group = data['bloodGroup']
         name = data['name']
 
-        print(f"Extracted - Name: {name}, Age: {age}, Sex: {sex}, Permittivity: {permittivity}")  # Debug logging
+        print(f"Extracted - Name: {name}, Blood Group: {blood_group}, Permittivity: {permittivity}")  # Debug logging
 
-        # Validate sex
-        if sex not in valid_genders:
-            print(f"Invalid gender: '{sex}', Valid values are: {valid_genders}")  # Debug logging
+        # Validate blood group
+        if blood_group not in valid_blood_groups:
+            print(f"Invalid blood group: '{blood_group}', Valid groups are: {valid_blood_groups}")  # Debug logging
             return jsonify({
-                'error': f'Invalid gender. Accepted values are {", ".join(valid_genders)}'
+                'error': f'Invalid blood group. Accepted values are {", ".join(valid_blood_groups)}'
             }), 400
 
         # Validate permittivity range (based on CSV data)
@@ -157,8 +155,8 @@ def predict():
             }), 400
 
         # Preprocess input
-        new_data_point_scaled = scaler.transform([[age, permittivity]])
-        new_data_point_encoded = encoder.transform([[sex]])
+        new_data_point_scaled = scaler.transform([[permittivity]])
+        new_data_point_encoded = encoder.transform([[blood_group]])
         new_data = np.hstack((new_data_point_scaled, new_data_point_encoded))
 
         # Make predictions
@@ -200,8 +198,7 @@ def predict():
         # Format and return predictions
         return jsonify({
             'name': name,
-            'age': age,
-            'gender': sex,
+            'blood_group': blood_group,
             'rbc_count': f"{predicted_rbc:.2f} millions/cumm",
             'rbc_status': rbc_status,
             'wbc_count': f"{predicted_wbc:.2f} /microliter",
@@ -229,7 +226,7 @@ def test():
 def info():
     # Provide information about the ML models and valid inputs
     return jsonify({
-        'valid_genders': valid_genders,
+        'valid_blood_groups': valid_blood_groups,
         'permittivity_range': {'min': 25.80, 'max': 25.83},
         'models': {
             'rbc': {'type': type(model_rbc).__name__},
@@ -237,14 +234,6 @@ def info():
             'platelets': {'type': type(model_platelets).__name__},
             'hemoglobin': {'type': type(model_hemoglobin).__name__}
         }
-    })
-
-@app.route('/', methods=['GET'])
-def root():
-    return jsonify({
-        'status': 'running',
-        'message': 'BioFlow API is operational',
-        'version': '2.0'
     })
 
 if __name__ == '__main__':

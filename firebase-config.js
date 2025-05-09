@@ -30,10 +30,5 @@ firebase.auth().onAuthStateChanged(function (user) {
   } else {
     // No user is signed in
     console.log("No user is signed in");
-
-    // If on dashboard page, redirect to login
-    if (window.location.pathname.includes("dashboard.html")) {
-      window.location.href = "index.html";
-    }
   }
 });

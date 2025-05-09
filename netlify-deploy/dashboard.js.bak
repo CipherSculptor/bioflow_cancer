@@ -115,25 +115,24 @@ document.addEventListener("DOMContentLoaded", () => {
       const nameInput = document.getElementById("userName");
       const ageInput = document.getElementById("userAge");
       const genderSelect = document.getElementById("userGender");
+      const bloodGroupSelect = document.getElementById("userBloodGroup");
       const permittivityInput = document.getElementById("userPermittivity");
 
       console.log("Form elements:", {
         nameInput: nameInput ? nameInput.value : "not found",
         ageInput: ageInput ? ageInput.value : "not found",
         genderSelect: genderSelect ? genderSelect.value : "not found",
+        bloodGroupSelect: bloodGroupSelect
+          ? bloodGroupSelect.value
+          : "not found",
         permittivityInput: permittivityInput
           ? permittivityInput.value
           : "not found",
       });
 
-      // Validate age
-      if (!ageInput || !ageInput.value) {
-        throw new Error("Age is required");
-      }
-
-      // Validate gender
-      if (!genderSelect || !genderSelect.value) {
-        throw new Error("Gender is required");
+      // Validate blood group
+      if (!bloodGroupSelect || !bloodGroupSelect.value) {
+        throw new Error("Blood group is required");
       }
 
       // Validate permittivity value
@@ -153,6 +152,7 @@ document.addEventListener("DOMContentLoaded", () => {
         name: nameInput ? nameInput.value : "",
         age: ageInput ? parseInt(ageInput.value) || 0 : 0,
         gender: genderSelect ? genderSelect.value : "",
+        bloodGroup: bloodGroupSelect.value,
         permittivity: permittivityValue, // Using the parsed float value
       };
 

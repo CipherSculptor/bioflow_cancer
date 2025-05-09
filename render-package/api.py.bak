@@ -24,40 +24,22 @@ valid_genders = ['male', 'female', 'other']
 def load_or_train_models():
     global encoder, scaler, model_rbc, model_wbc, model_platelets, model_hemoglobin
 
-    # Check if models are already saved
-    if os.path.exists('models/model_rbc.joblib'):
-        # Load pre-trained models
-        encoder = joblib.load('models/encoder.joblib')
-        scaler = joblib.load('models/scaler.joblib')
-        model_rbc = joblib.load('models/model_rbc.joblib')
-        model_wbc = joblib.load('models/model_wbc.joblib')
-        model_platelets = joblib.load('models/model_platelets.joblib')
-        model_hemoglobin = joblib.load('models/model_hemoglobin.joblib')
-        print("Loaded pre-trained models from disk")
-    else:
-        # Load and prepare data
-        try:
-            # Load the CSV data with proper handling of thousands separator
-            data = pd.read_csv('CBC_REPORT_PERMITTIVITY.csv', thousands=',')
-            print(f"Successfully loaded data from CSV: {len(data)} rows")
-
-            # Convert columns to numeric if needed
-            for col in ['RBC Count', 'WBC Count', 'Platelets', 'Hemoglobin', 'Permittivity']:
-                if data[col].dtype == 'object':
-                    # Handle string values that may have commas as thousand separators
-                    data[col] = pd.to_numeric(data[col].str.replace(',', ''), errors='coerce')
-
-            # Add synthetic Age and Sex columns since we're removing Blood Group
-            data['Age'] = np.random.randint(18, 80, len(data))
-            data['Sex'] = np.random.choice(['male', 'female'], len(data))
-
-            print("Data shape after loading:", data.shape)
-            print("Data columns:", data.columns.tolist())
-            print("Data preview:", data.head())
-
-        except FileNotFoundError:
-            # Sample data if file not found (for development purposes)
-            print("Warning: CSV file not found. Using sample data.")
+    try:
+        # Check if models are already saved
+        if os.path.exists('models/model_rbc.joblib'):
+            # Load pre-trained models
+            encoder = joblib.load('models/encoder.joblib')
+            scaler = joblib.load('models/scaler.joblib')
+            model_rbc = joblib.load('models/model_rbc.joblib')
+            model_wbc = joblib.load('models/model_wbc.joblib')
+            model_platelets = joblib.load('models/model_platelets.joblib')
+            model_hemoglobin = joblib.load('models/model_hemoglobin.joblib')
+            print("Loaded pre-trained models from disk")
+            return True
+        else:
+            # Generate and train with sample data
+            print("Models not found. Using sample data to train new models.")
+            # Sample data since file not found (for deployment purposes)
             data = pd.DataFrame({
                 'Age': np.random.randint(18, 80, 30),
                 'Sex': np.random.choice(['male', 'female', 'other'], 30),
@@ -68,59 +50,48 @@ def load_or_train_models():
                 'Hemoglobin': np.random.normal(14, 1.5, 30)
             })
 
-        if len(data) < 5:
-            raise ValueError("Not enough data points for training")
+            # Train models with the sample data
+            # Preprocess data
+            encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
+            sex_encoded = encoder.fit_transform(data[['Sex']])
 
-        # Preprocess data
-        encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
-        sex_encoded = encoder.fit_transform(data[['Sex']])
+            scaler = StandardScaler()
+            numerical_features = scaler.fit_transform(data[['Age', 'Permittivity']])
 
-        scaler = StandardScaler()
-        numerical_features = scaler.fit_transform(data[['Age', 'Permittivity']])
+            X = np.hstack((numerical_features, sex_encoded))
+            y_rbc = data['RBC Count']
+            y_wbc = data['WBC Count']
+            y_platelets = data['Platelets']
+            y_hemoglobin = data['Hemoglobin']
 
-        X = np.hstack((numerical_features, sex_encoded))
-        y_rbc = data['RBC Count']
-        y_wbc = data['WBC Count']
-        y_platelets = data['Platelets']
-        y_hemoglobin = data['Hemoglobin']
+            # Train models directly without splitting (since this is sample data)
+            model_rbc = MLPRegressor(hidden_layer_sizes=(100, 50), max_iter=1000, random_state=42)
+            model_wbc = MLPRegressor(hidden_layer_sizes=(100, 50), max_iter=1000, random_state=42)
+            model_platelets = MLPRegressor(hidden_layer_sizes=(100, 50), max_iter=1000, random_state=42)
+            model_hemoglobin = MLPRegressor(hidden_layer_sizes=(100, 50), max_iter=1000, random_state=42)
 
-        # Split data for validation
-        X_train, X_test, y_rbc_train, y_rbc_test = train_test_split(X, y_rbc, test_size=0.2, random_state=42)
-        _, _, y_wbc_train, y_wbc_test = train_test_split(X, y_wbc, test_size=0.2, random_state=42)
-        _, _, y_platelets_train, y_platelets_test = train_test_split(X, y_platelets, test_size=0.2, random_state=42)
-        _, _, y_hemoglobin_train, y_hemoglobin_test = train_test_split(X, y_hemoglobin, test_size=0.2, random_state=42)
+            model_rbc.fit(X, y_rbc)
+            model_wbc.fit(X, y_wbc)
+            model_platelets.fit(X, y_platelets)
+            model_hemoglobin.fit(X, y_hemoglobin)
 
-        print("Training models with MLPRegressor (Neural Network)...")
+            # Try to save models if directory exists or can be created
+            try:
+                os.makedirs('models', exist_ok=True)
+                joblib.dump(encoder, 'models/encoder.joblib')
+                joblib.dump(scaler, 'models/scaler.joblib')
+                joblib.dump(model_rbc, 'models/model_rbc.joblib')
+                joblib.dump(model_wbc, 'models/model_wbc.joblib')
+                joblib.dump(model_platelets, 'models/model_platelets.joblib')
+                joblib.dump(model_hemoglobin, 'models/model_hemoglobin.joblib')
+                print("Sample models trained and saved successfully")
+            except Exception as e:
+                print(f"Warning: Could not save models: {e}")
 
-        # Train models with MLPRegressor instead of RandomForest
-        model_rbc = MLPRegressor(hidden_layer_sizes=(100, 50), max_iter=1000, random_state=42)
-        model_wbc = MLPRegressor(hidden_layer_sizes=(100, 50), max_iter=1000, random_state=42)
-        model_platelets = MLPRegressor(hidden_layer_sizes=(100, 50), max_iter=1000, random_state=42)
-        model_hemoglobin = MLPRegressor(hidden_layer_sizes=(100, 50), max_iter=1000, random_state=42)
-
-        model_rbc.fit(X_train, y_rbc_train)
-        model_wbc.fit(X_train, y_wbc_train)
-        model_platelets.fit(X_train, y_platelets_train)
-        model_hemoglobin.fit(X_train, y_hemoglobin_train)
-
-        # Evaluate models
-        rbc_score = model_rbc.score(X_test, y_rbc_test)
-        wbc_score = model_wbc.score(X_test, y_wbc_test)
-        platelets_score = model_platelets.score(X_test, y_platelets_test)
-        hemoglobin_score = model_hemoglobin.score(X_test, y_hemoglobin_test)
-
-        print(f"Model R² scores - RBC: {rbc_score:.4f}, WBC: {wbc_score:.4f}, Platelets: {platelets_score:.4f}, Hemoglobin: {hemoglobin_score:.4f}")
-
-        # Save models
-        os.makedirs('models', exist_ok=True)
-        joblib.dump(encoder, 'models/encoder.joblib')
-        joblib.dump(scaler, 'models/scaler.joblib')
-        joblib.dump(model_rbc, 'models/model_rbc.joblib')
-        joblib.dump(model_wbc, 'models/model_wbc.joblib')
-        joblib.dump(model_platelets, 'models/model_platelets.joblib')
-        joblib.dump(model_hemoglobin, 'models/model_hemoglobin.joblib')
-
-        print("Models trained and saved successfully")
+            return True
+    except Exception as e:
+        print(f"Error in load_or_train_models: {e}")
+        return False
 
 @app.route('/predict', methods=['POST'])
 def predict():
@@ -142,11 +113,11 @@ def predict():
 
         print(f"Extracted - Name: {name}, Age: {age}, Sex: {sex}, Permittivity: {permittivity}")  # Debug logging
 
-        # Validate sex
-        if sex not in valid_genders:
-            print(f"Invalid gender: '{sex}', Valid values are: {valid_genders}")  # Debug logging
+        # Validate blood group
+        if blood_group not in valid_blood_groups:
+            print(f"Invalid blood group: '{blood_group}', Valid groups are: {valid_blood_groups}")  # Debug logging
             return jsonify({
-                'error': f'Invalid gender. Accepted values are {", ".join(valid_genders)}'
+                'error': f'Invalid blood group. Accepted values are {", ".join(valid_blood_groups)}'
             }), 400
 
         # Validate permittivity range (based on CSV data)
@@ -228,17 +199,16 @@ def test():
 @app.route('/info', methods=['GET'])
 def info():
     # Provide information about the ML models and valid inputs
+    models_loaded = all([model_rbc, model_wbc, model_platelets, model_hemoglobin])
     return jsonify({
+        'status': 'running',
+        'models_loaded': models_loaded,
         'valid_genders': valid_genders,
-        'permittivity_range': {'min': 25.80, 'max': 25.83},
-        'models': {
-            'rbc': {'type': type(model_rbc).__name__},
-            'wbc': {'type': type(model_wbc).__name__},
-            'platelets': {'type': type(model_platelets).__name__},
-            'hemoglobin': {'type': type(model_hemoglobin).__name__}
-        }
+        'permittivity_range': '25.80 - 25.83',
+        'version': '2.0'
     })
 
+# Add a root endpoint for health checks
 @app.route('/', methods=['GET'])
 def root():
     return jsonify({
@@ -247,9 +217,7 @@ def root():
         'version': '2.0'
     })
 
-if __name__ == '__main__':
-    try:
-        load_or_train_models()
-        app.run(debug=True, host='0.0.0.0', port=5070)
-    except Exception as e:
-        print(f"Failed to start server: {str(e)}")
+# Call this function when the app initializes
+if __name__ == "__main__":
+    load_or_train_models()
+    app.run(debug=True)

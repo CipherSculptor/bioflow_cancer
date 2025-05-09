@@ -1,147 +1,116 @@
-// Results.js - Complete rewrite with same functionality but no bloodGroup references
 document.addEventListener("DOMContentLoaded", () => {
-  // Get DOM elements
   const profileButton = document.getElementById("profileButton");
   const profileDropdown = document.getElementById("profileDropdown");
 
   // Toggle profile dropdown
-  if (profileButton) {
-    profileButton.addEventListener("click", (e) => {
-      e.stopPropagation();
-      profileDropdown.classList.toggle("show");
-    });
-  }
+  profileButton.addEventListener("click", (e) => {
+    e.stopPropagation();
+    profileDropdown.classList.toggle("show");
+  });
 
   // Close dropdown when clicking outside
   document.addEventListener("click", (e) => {
-    if (profileButton && !profileButton.contains(e.target)) {
+    if (!profileButton.contains(e.target)) {
       profileDropdown.classList.remove("show");
     }
   });
 
   try {
     // Load user details and results
-    console.log("Loading user details from localStorage");
-    const userDetailsStr = localStorage.getItem("userDetails");
-    
-    if (!userDetailsStr) {
-      console.error("No user details found in localStorage");
-      alert("No results found. Redirecting to dashboard.");
-      window.location.href = "dashboard.html";
-      return;
-    }
-    
-    console.log("Raw user details:", userDetailsStr);
-    
-    // Parse user data
-    const userData = JSON.parse(userDetailsStr);
-    console.log("Parsed user data:", userData);
-    
+    const userData = JSON.parse(localStorage.getItem("userDetails") || "{}");
+    console.log("User data from localStorage:", userData);
+
     // Check if we have prediction results
     if (!userData.results) {
-      console.error("No results found in user data");
+      console.error("No results found in localStorage");
       alert("No results found. Redirecting to dashboard.");
       window.location.href = "dashboard.html";
       return;
     }
-    
-    // Log available result keys for debugging
-    console.log("Available result keys:", Object.keys(userData.results));
-    
+
     // Display results in the form
-    // Name
-    const nameElement = document.getElementById("resultName");
-    if (nameElement) {
-      nameElement.value = userData.results.name || userData.name || "-";
-    }
-    
-    // Hemoglobin
+    document.getElementById("resultName").value = userData.results.name || "-";
+
+    // Display age
+    document.getElementById("resultAge").value = userData.results.age || "-";
+
+    // Display gender
+    document.getElementById("resultGender").value =
+      userData.results.gender || "-";
+
+    // Display hemoglobin with status
     const hemoglobinInput = document.getElementById("resultHemoglobin");
-    if (hemoglobinInput) {
-      hemoglobinInput.value = userData.results.hemoglobin || "-";
-      if (userData.results.hemoglobin_status) {
-        applyStatusStyling(hemoglobinInput, userData.results.hemoglobin_status);
-      }
+    hemoglobinInput.value = userData.results.hemoglobin || "-";
+    if (userData.results.hemoglobin_status) {
+      applyStatusStyling(hemoglobinInput, userData.results.hemoglobin_status);
     }
-    
-    // RBC count
+
+    // Display RBC count with status
     const rbcInput = document.getElementById("resultRBCCount");
-    if (rbcInput) {
-      rbcInput.value = userData.results.rbc_count || "-";
-      if (userData.results.rbc_status) {
-        applyStatusStyling(rbcInput, userData.results.rbc_status);
-      }
+    rbcInput.value = userData.results.rbc_count || "-";
+    if (userData.results.rbc_status) {
+      applyStatusStyling(rbcInput, userData.results.rbc_status);
     }
-    
-    // WBC count
+
+    // Display platelets count with status
+    const plateletsInput = document.getElementById("resultPlateletsCount");
+    plateletsInput.value = userData.results.platelets_count || "-";
+    if (userData.results.platelets_status) {
+      applyStatusStyling(plateletsInput, userData.results.platelets_status);
+    }
+
+    // Add WBC count display if it exists in the page
     const wbcInput = document.getElementById("resultWBCCount");
-    if (wbcInput) {
-      wbcInput.value = userData.results.wbc_count || "-";
+    if (wbcInput && userData.results.wbc_count) {
+      wbcInput.value = userData.results.wbc_count;
       if (userData.results.wbc_status) {
         applyStatusStyling(wbcInput, userData.results.wbc_status);
       }
     }
-    
-    // Platelets count
-    const plateletsInput = document.getElementById("resultPlateletsCount");
-    if (plateletsInput) {
-      plateletsInput.value = userData.results.platelets_count || "-";
-      if (userData.results.platelets_status) {
-        applyStatusStyling(plateletsInput, userData.results.platelets_status);
-      }
-    }
-    
+
     console.log("Results displayed successfully");
   } catch (error) {
     console.error("Error loading results:", error);
     alert("Error loading results: " + error.message);
-    
-    // Try to recover by redirecting back to dashboard
-    setTimeout(() => {
-      window.location.href = "dashboard.html";
-    }, 3000);
   }
 });
 
 // Function to apply styling based on status
 function applyStatusStyling(element, status) {
-  if (!element) return;
-  
   // Remove any existing status classes
-  element.classList.remove("normal", "low", "high");
-  
-  // Add appropriate class based on status
-  if (status.toLowerCase() === "normal") {
-    element.classList.add("normal");
-  } else if (status.toLowerCase() === "low") {
-    element.classList.add("low");
-  } else if (status.toLowerCase() === "high") {
-    element.classList.add("high");
+  element.classList.remove("status-low", "status-normal", "status-high");
+
+  // Add appropriate status class
+  element.classList.add(`status-${status}`);
+
+  // Add a status indicator element after the input
+  const container = element.parentElement;
+
+  // Remove any existing status indicators
+  const existingIndicator = container.querySelector(".status-indicator");
+  if (existingIndicator) {
+    container.removeChild(existingIndicator);
   }
+
+  // Create new status indicator
+  const statusIndicator = document.createElement("div");
+  statusIndicator.className = `status-indicator ${status}`;
+  statusIndicator.textContent =
+    status.charAt(0).toUpperCase() + status.slice(1);
+  container.appendChild(statusIndicator);
 }
 
-// PDF generation function
+// Function to generate and download PDF
 function generatePDF() {
   try {
-    console.log("Generating PDF");
     const { jsPDF } = window.jspdf;
-    
-    if (!jsPDF) {
-      throw new Error("jsPDF library not loaded");
-    }
-    
-    // Create new PDF document
-    const doc = new jsPDF({
-      orientation: "portrait",
-      unit: "mm",
-      format: "a4",
-    });
-    
+    const doc = new jsPDF();
+
     // Add header
     doc.setFontSize(22);
     doc.setTextColor(120, 3, 3);
-    doc.text("BioFlow - CBC Test Results", 105, 20, { align: "center" });
-    
+    doc.text("BioFlow - Blood Test Results", 105, 20, { align: "center" });
+
     // Add date
     doc.setFontSize(12);
     doc.setTextColor(100, 100, 100);
@@ -149,87 +118,110 @@ function generatePDF() {
     doc.text(`Date: ${today.toLocaleDateString()}`, 105, 30, {
       align: "center",
     });
-    
+
     // Add content
     doc.setFontSize(14);
     doc.setTextColor(0, 0, 0);
-    
-    // Get values from form
-    const name = document.getElementById("resultName")?.value || "-";
-    const hemoglobin = document.getElementById("resultHemoglobin")?.value || "-";
-    const rbcCount = document.getElementById("resultRBCCount")?.value || "-";
-    const plateletsCount = document.getElementById("resultPlateletsCount")?.value || "-";
-    const wbcCount = document.getElementById("resultWBCCount")?.value || "-";
-    
-    // Get user data for status information
+
+    const name = document.getElementById("resultName").value;
+    const age = document.getElementById("resultAge").value;
+    const gender = document.getElementById("resultGender").value;
+    const hemoglobin = document.getElementById("resultHemoglobin").value;
+    const rbcCount = document.getElementById("resultRBCCount").value;
+    const plateletsCount = document.getElementById(
+      "resultPlateletsCount"
+    ).value;
+    const wbcCount = document.getElementById("resultWBCCount")?.value || "";
+
+    // Get status information if available
     const userData = JSON.parse(localStorage.getItem("userDetails") || "{}");
     const hemoglobinStatus = userData.results?.hemoglobin_status || "";
     const rbcStatus = userData.results?.rbc_status || "";
     const plateletsStatus = userData.results?.platelets_status || "";
     const wbcStatus = userData.results?.wbc_status || "";
-    
+
     // Add results with status
     doc.text(`Name: ${name}`, 20, 50);
-    
+    doc.text(`Age: ${age}`, 20, 70);
+    doc.text(`Gender: ${gender}`, 20, 90);
+
     // Hemoglobin with status
-    doc.text(`Hemoglobin: ${hemoglobin}`, 20, 70);
+    doc.text(`Hemoglobin: ${hemoglobin}`, 20, 110);
     if (hemoglobinStatus) {
-      doc.setTextColor(getStatusColor(hemoglobinStatus));
-      doc.text(`(${hemoglobinStatus})`, 120, 70);
+      doc.setFontSize(12);
+      setStatusColor(doc, hemoglobinStatus);
+      doc.text(`Status: ${hemoglobinStatus.toUpperCase()}`, 150, 110);
+      doc.setFontSize(14);
       doc.setTextColor(0, 0, 0);
     }
-    
-    // RBC count with status
-    doc.text(`RBC Count: ${rbcCount}`, 20, 90);
+
+    // RBC Count with status
+    doc.text(`RBC Count: ${rbcCount}`, 20, 130);
     if (rbcStatus) {
-      doc.setTextColor(getStatusColor(rbcStatus));
-      doc.text(`(${rbcStatus})`, 120, 90);
+      doc.setFontSize(12);
+      setStatusColor(doc, rbcStatus);
+      doc.text(`Status: ${rbcStatus.toUpperCase()}`, 150, 130);
+      doc.setFontSize(14);
       doc.setTextColor(0, 0, 0);
     }
-    
-    // WBC count with status
-    doc.text(`WBC Count: ${wbcCount}`, 20, 110);
-    if (wbcStatus) {
-      doc.setTextColor(getStatusColor(wbcStatus));
-      doc.text(`(${wbcStatus})`, 120, 110);
-      doc.setTextColor(0, 0, 0);
+
+    // WBC Count with status (if available)
+    let currentY = 150;
+    if (wbcCount) {
+      doc.text(`WBC Count: ${wbcCount}`, 20, currentY);
+      if (wbcStatus) {
+        doc.setFontSize(12);
+        setStatusColor(doc, wbcStatus);
+        doc.text(`Status: ${wbcStatus.toUpperCase()}`, 150, currentY);
+        doc.setFontSize(14);
+        doc.setTextColor(0, 0, 0);
+      }
+      currentY += 20;
     }
-    
-    // Platelets count with status
-    doc.text(`Platelets Count: ${plateletsCount}`, 20, 130);
+
+    // Platelets Count with status
+    doc.text(`Platelets Count: ${plateletsCount}`, 20, currentY);
     if (plateletsStatus) {
-      doc.setTextColor(getStatusColor(plateletsStatus));
-      doc.text(`(${plateletsStatus})`, 120, 130);
+      doc.setFontSize(12);
+      setStatusColor(doc, plateletsStatus);
+      doc.text(`Status: ${plateletsStatus.toUpperCase()}`, 150, currentY);
+      doc.setFontSize(14);
       doc.setTextColor(0, 0, 0);
     }
-    
+
     // Add footer
     doc.setFontSize(10);
     doc.setTextColor(100, 100, 100);
     doc.text(
-      "This is a computer-generated report and does not require a signature.",
+      "This report is generated by BioFlow. Results are based on machine learning predictions.",
       105,
-      280,
+      250,
       { align: "center" }
     );
-    
+
     // Save the PDF
-    doc.save(`BioFlow_CBC_Results_${name.replace(/\s+/g, "_")}.pdf`);
+    doc.save(`BioFlow_Report_${name.replace(/\s+/g, "_")}.pdf`);
+
     console.log("PDF generated successfully");
   } catch (error) {
     console.error("Error generating PDF:", error);
-    alert("Failed to generate PDF: " + error.message);
+    alert("Error generating PDF: " + error.message);
   }
 }
 
-// Helper function to get color based on status
-function getStatusColor(status) {
-  if (status.toLowerCase() === "normal") {
-    return [0, 128, 0]; // Green
-  } else if (status.toLowerCase() === "low") {
-    return [255, 0, 0]; // Red
-  } else if (status.toLowerCase() === "high") {
-    return [255, 165, 0]; // Orange
+// Helper function to set PDF text color based on status
+function setStatusColor(doc, status) {
+  switch (status) {
+    case "low":
+      doc.setTextColor(255, 0, 0); // Red
+      break;
+    case "high":
+      doc.setTextColor(255, 165, 0); // Orange
+      break;
+    case "normal":
+      doc.setTextColor(0, 128, 0); // Green
+      break;
+    default:
+      doc.setTextColor(0, 0, 0); // Black
   }
-  return [0, 0, 0]; // Default black
 }
