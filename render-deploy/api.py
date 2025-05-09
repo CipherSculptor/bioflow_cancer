@@ -2,10 +2,9 @@ import numpy as np
 import pandas as pd
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.neural_network import MLPRegressor
 from sklearn.model_selection import train_test_split
-from sklearn.impute import SimpleImputer
 import joblib
 import os
 
@@ -14,31 +13,43 @@ app = Flask(__name__)
 CORS(app, supports_credentials=True, resources={r"/*": {"origins": "*", "allow_headers": "*", "expose_headers": "*"}})
 
 # Global variables to store our trained models and preprocessing objects
-scaler_X = None
-scaler_y = None
-imputer_X = None
-model = None
+encoder = None
+scaler = None
+model_rbc = None
+model_wbc = None
+model_platelets = None
+model_hemoglobin = None
+valid_genders = ['male', 'female', 'other']
 
 def load_or_train_models():
-    global scaler_X, scaler_y, imputer_X, model
+    global encoder, scaler, model_rbc, model_wbc, model_platelets, model_hemoglobin
 
     # Check if models are already saved
-    if os.path.exists('models/mlp_model.joblib'):
+    if os.path.exists('models/model_rbc.joblib'):
         # Load pre-trained models
-        scaler_X = joblib.load('models/scaler_X.joblib')
-        scaler_y = joblib.load('models/scaler_y.joblib')
-        imputer_X = joblib.load('models/imputer_X.joblib')
-        model = joblib.load('models/mlp_model.joblib')
+        encoder = joblib.load('models/encoder.joblib')
+        scaler = joblib.load('models/scaler.joblib')
+        model_rbc = joblib.load('models/model_rbc.joblib')
+        model_wbc = joblib.load('models/model_wbc.joblib')
+        model_platelets = joblib.load('models/model_platelets.joblib')
+        model_hemoglobin = joblib.load('models/model_hemoglobin.joblib')
         print("Loaded pre-trained models from disk")
     else:
         # Load and prepare data
         try:
             # Load the CSV data with proper handling of thousands separator
-            data = pd.read_csv('sample 1.csv')
+            data = pd.read_csv('CBC_REPORT_PERMITTIVITY.csv', thousands=',')
             print(f"Successfully loaded data from CSV: {len(data)} rows")
 
-            # Fix column names (remove spaces if any)
-            data.columns = data.columns.str.strip()
+            # Convert columns to numeric if needed
+            for col in ['RBC Count', 'WBC Count', 'Platelets', 'Hemoglobin', 'Permittivity']:
+                if data[col].dtype == 'object':
+                    # Handle string values that may have commas as thousand separators
+                    data[col] = pd.to_numeric(data[col].str.replace(',', ''), errors='coerce')
+
+            # Add synthetic Age and Sex columns since we're removing Blood Group
+            data['Age'] = np.random.randint(18, 80, len(data))
+            data['Sex'] = np.random.choice(['male', 'female'], len(data))
 
             print("Data shape after loading:", data.shape)
             print("Data columns:", data.columns.tolist())
@@ -48,60 +59,68 @@ def load_or_train_models():
             # Sample data if file not found (for development purposes)
             print("Warning: CSV file not found. Using sample data.")
             data = pd.DataFrame({
-                'Age': np.random.normal(35, 10, 100),
-                'Sex': np.random.choice([0, 1], size=100),  # 0 for female, 1 for male
-                'Permittivity_Real': np.random.normal(25.81, 0.01, 100),
-                'RBC': np.random.normal(4.5, 0.5, 100),
-                'TLC': np.random.normal(8000, 1000, 100),
-                'PLT /mm3': np.random.normal(250, 50, 100) * 1000,  # Realistic scale
-                'HGB': np.random.normal(14, 1.5, 100)
+                'Age': np.random.randint(18, 80, 30),
+                'Sex': np.random.choice(['male', 'female', 'other'], 30),
+                'Permittivity': np.random.normal(25.81, 0.01, 30),
+                'RBC Count': np.random.normal(4.5, 0.5, 30),
+                'WBC Count': np.random.normal(8000, 1000, 30),
+                'Platelets': np.random.normal(250000, 50000, 30),
+                'Hemoglobin': np.random.normal(14, 1.5, 30)
             })
 
-        # Select features and target variables
-        X = data[['Age', 'Sex', 'Permittivity_Real']]
-        y = data[['RBC', 'TLC', 'PLT /mm3', 'HGB']]
+        if len(data) < 5:
+            raise ValueError("Not enough data points for training")
 
-        # Handle missing values
-        imputer_X = SimpleImputer(strategy='mean')
-        X_imputed = pd.DataFrame(imputer_X.fit_transform(X), columns=X.columns)
+        # Preprocess data
+        encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
+        sex_encoded = encoder.fit_transform(data[['Sex']])
 
-        imputer_y = SimpleImputer(strategy='mean')
-        y_imputed = pd.DataFrame(imputer_y.fit_transform(y), columns=y.columns)
+        scaler = StandardScaler()
+        numerical_features = scaler.fit_transform(data[['Age', 'Permittivity']])
+
+        X = np.hstack((numerical_features, sex_encoded))
+        y_rbc = data['RBC Count']
+        y_wbc = data['WBC Count']
+        y_platelets = data['Platelets']
+        y_hemoglobin = data['Hemoglobin']
 
         # Split data for validation
-        X_train, X_test, y_train, y_test = train_test_split(X_imputed, y_imputed, test_size=0.2, random_state=42)
+        X_train, X_test, y_rbc_train, y_rbc_test = train_test_split(X, y_rbc, test_size=0.2, random_state=42)
+        _, _, y_wbc_train, y_wbc_test = train_test_split(X, y_wbc, test_size=0.2, random_state=42)
+        _, _, y_platelets_train, y_platelets_test = train_test_split(X, y_platelets, test_size=0.2, random_state=42)
+        _, _, y_hemoglobin_train, y_hemoglobin_test = train_test_split(X, y_hemoglobin, test_size=0.2, random_state=42)
 
-        # Feature scaling
-        scaler_X = StandardScaler()
-        X_train_scaled = scaler_X.fit_transform(X_train)
-        X_test_scaled = scaler_X.transform(X_test)
+        print("Training models with MLPRegressor (Neural Network)...")
 
-        scaler_y = StandardScaler()
-        y_train_scaled = scaler_y.fit_transform(y_train)
+        # Train models with MLPRegressor instead of RandomForest
+        model_rbc = MLPRegressor(hidden_layer_sizes=(100, 50), max_iter=1000, random_state=42)
+        model_wbc = MLPRegressor(hidden_layer_sizes=(100, 50), max_iter=1000, random_state=42)
+        model_platelets = MLPRegressor(hidden_layer_sizes=(100, 50), max_iter=1000, random_state=42)
+        model_hemoglobin = MLPRegressor(hidden_layer_sizes=(100, 50), max_iter=1000, random_state=42)
 
-        print("Training model with MLPRegressor (Neural Network)...")
+        model_rbc.fit(X_train, y_rbc_train)
+        model_wbc.fit(X_train, y_wbc_train)
+        model_platelets.fit(X_train, y_platelets_train)
+        model_hemoglobin.fit(X_train, y_hemoglobin_train)
 
-        # Train model with Neural Network
-        model = MLPRegressor(hidden_layer_sizes=(64, 64), activation='relu',
-                            solver='adam', max_iter=500, random_state=42)
-        model.fit(X_train_scaled, y_train_scaled)
+        # Evaluate models
+        rbc_score = model_rbc.score(X_test, y_rbc_test)
+        wbc_score = model_wbc.score(X_test, y_wbc_test)
+        platelets_score = model_platelets.score(X_test, y_platelets_test)
+        hemoglobin_score = model_hemoglobin.score(X_test, y_hemoglobin_test)
 
-        # Evaluate model
-        y_pred_scaled = model.predict(X_test_scaled)
-        y_pred = scaler_y.inverse_transform(y_pred_scaled)
-
-        # Print model evaluation metrics
-        from sklearn.metrics import mean_absolute_error
-        print(f"Model Mean Absolute Error: {mean_absolute_error(y_test, y_pred):.4f}")
+        print(f"Model R² scores - RBC: {rbc_score:.4f}, WBC: {wbc_score:.4f}, Platelets: {platelets_score:.4f}, Hemoglobin: {hemoglobin_score:.4f}")
 
         # Save models
         os.makedirs('models', exist_ok=True)
-        joblib.dump(scaler_X, 'models/scaler_X.joblib')
-        joblib.dump(scaler_y, 'models/scaler_y.joblib')
-        joblib.dump(imputer_X, 'models/imputer_X.joblib')
-        joblib.dump(model, 'models/mlp_model.joblib')
+        joblib.dump(encoder, 'models/encoder.joblib')
+        joblib.dump(scaler, 'models/scaler.joblib')
+        joblib.dump(model_rbc, 'models/model_rbc.joblib')
+        joblib.dump(model_wbc, 'models/model_wbc.joblib')
+        joblib.dump(model_platelets, 'models/model_platelets.joblib')
+        joblib.dump(model_hemoglobin, 'models/model_hemoglobin.joblib')
 
-        print("Model trained and saved successfully")
+        print("Models trained and saved successfully")
 
 @app.route('/predict', methods=['POST'])
 def predict():
@@ -112,40 +131,41 @@ def predict():
         # Extract data from request
         try:
             permittivity = float(data['permittivity'])
-            age = float(data['age'])
-            gender = data['gender']
-            # Convert gender to binary (0 for female, 1 for male)
-            sex = 1 if gender.lower() == 'male' else 0
-        except (ValueError, TypeError, KeyError) as e:
+            age = int(data['age'])
+            sex = data['gender']
+        except (ValueError, TypeError):
             return jsonify({
-                'error': f'Invalid input data: {str(e)}'
+                'error': 'Invalid input values. Age and permittivity must be valid numbers.'
             }), 400
 
         name = data['name']
 
         print(f"Extracted - Name: {name}, Age: {age}, Sex: {sex}, Permittivity: {permittivity}")  # Debug logging
 
-        # Validate permittivity range
-        if permittivity < 25.70 or permittivity > 25.90:
-            print(f"Warning: Permittivity value {permittivity} is out of expected range (25.70-25.90)")
+        # Validate sex
+        if sex not in valid_genders:
+            print(f"Invalid gender: '{sex}', Valid values are: {valid_genders}")  # Debug logging
             return jsonify({
-                'error': f'Permittivity value {permittivity} is out of expected range (25.70-25.90)'
+                'error': f'Invalid gender. Accepted values are {", ".join(valid_genders)}'
+            }), 400
+
+        # Validate permittivity range (wider range as per requirements)
+        if permittivity < 25.0 or permittivity > 26.0:
+            print(f"Warning: Permittivity value {permittivity} is out of expected range (25.0-26.0)")
+            return jsonify({
+                'error': f'Permittivity value {permittivity} is out of expected range (25.0-26.0)'
             }), 400
 
         # Preprocess input
-        input_data = np.array([[age, sex, permittivity]])
-        input_data_imputed = imputer_X.transform(input_data)
-        input_data_scaled = scaler_X.transform(input_data_imputed)
+        new_data_point_scaled = scaler.transform([[age, permittivity]])
+        new_data_point_encoded = encoder.transform([[sex]])
+        new_data = np.hstack((new_data_point_scaled, new_data_point_encoded))
 
         # Make predictions
-        prediction_scaled = model.predict(input_data_scaled)
-        prediction = scaler_y.inverse_transform(prediction_scaled)[0]
-
-        # Extract individual predictions
-        predicted_rbc = prediction[0]
-        predicted_wbc = prediction[1]
-        predicted_platelets = prediction[2]
-        predicted_hemoglobin = prediction[3]
+        predicted_rbc = model_rbc.predict(new_data)[0]
+        predicted_wbc = model_wbc.predict(new_data)[0]
+        predicted_platelets = model_platelets.predict(new_data)[0]
+        predicted_hemoglobin = model_hemoglobin.predict(new_data)[0]
 
         # Reference ranges for context
         reference_ranges = {
@@ -180,6 +200,8 @@ def predict():
         # Format and return predictions
         return jsonify({
             'name': name,
+            'age': age,
+            'gender': sex,
             'rbc_count': f"{predicted_rbc:.2f} millions/cumm",
             'rbc_status': rbc_status,
             'wbc_count': f"{predicted_wbc:.2f} /microliter",
@@ -207,22 +229,27 @@ def test():
 def info():
     # Provide information about the ML models and valid inputs
     return jsonify({
-        'permittivity_range': {'min': 25.70, 'max': 25.90},
-        'model': {
-            'type': type(model).__name__,
-            'features': ['Age', 'Sex', 'Permittivity_Real'],
-            'targets': ['RBC', 'TLC', 'PLT /mm3', 'HGB']
+        'valid_genders': valid_genders,
+        'permittivity_range': {'min': 25.0, 'max': 26.0},
+        'models': {
+            'rbc': {'type': type(model_rbc).__name__},
+            'wbc': {'type': type(model_wbc).__name__},
+            'platelets': {'type': type(model_platelets).__name__},
+            'hemoglobin': {'type': type(model_hemoglobin).__name__}
         }
     })
 
-# Load models when the module is imported
-try:
-    load_or_train_models()
-except Exception as e:
-    print(f"Failed to load models: {str(e)}")
+@app.route('/', methods=['GET'])
+def root():
+    return jsonify({
+        'status': 'running',
+        'message': 'BioFlow API is operational',
+        'version': '2.0'
+    })
 
 if __name__ == '__main__':
     try:
+        load_or_train_models()
         app.run(debug=True, host='0.0.0.0', port=5070)
     except Exception as e:
         print(f"Failed to start server: {str(e)}")
